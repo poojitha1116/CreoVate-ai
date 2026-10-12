@@ -5,3 +5,5 @@ sentence-transformers
 Pillow
 pandas
 pytest
+supabase
+python-dotenv

@@ -53,3 +53,22 @@ def test_filters_and_empty_hint():
 def test_filter_options():
     opts = get_filter_options(df)
     assert "fashion" in opts["niches"] and "video" in opts["content_types"]
+
+
+def test_rank_creators_handles_supabase_rows_with_empty_values():
+    # Supabase sends None for empty columns, so nothing should crash.
+    supabase_rows = [
+        {"id": "CR001", "name": "Sarah Malik", "niches": ["Fashion", "Beauty"],
+         "content_types": ["Short-form Video"], "skills": [], "tools": [],
+         "formats": [], "engagement": "4.8%", "rate_min": 500, "rate_max": 1200,
+         "rating": 4.8, "commercial_license": True, "verified_tools": [],
+         "verified_past_work": True, "workflow": None, "bio": None,
+         "specialization": None},
+        {"id": "CR099", "name": "Empty Profile", "niches": None,
+         "content_types": None, "rate_min": None, "rate_max": None,
+         "rating": None, "engagement": None, "commercial_license": True},
+    ]
+    b = Brief(content_type="Short-form Video", niches=["Beauty"], budget=800)
+    ranked = rank_creators(supabase_rows, b)
+    assert len(ranked) == 2
+    assert ranked[0]["name"] == "Sarah Malik"

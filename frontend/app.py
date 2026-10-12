@@ -2,6 +2,7 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 from modules.ai_matching.matcher import Brief, rank_creators
+from modules.ai_matching.db import fetch_creators
 
 # Backwards-compatibility helper for Streamlit < 1.27
 def rerun_app():
@@ -253,11 +254,11 @@ DEFAULT_CREATORS = [
 
 # 4. State Management
 if "creators" not in st.session_state:
-    st.session_state["creators"] = DEFAULT_CREATORS
+    st.session_state["creators"] = fetch_creators() or DEFAULT_CREATORS
 if "page" not in st.session_state:
     st.session_state["page"] = "Dashboard"
 if "selected" not in st.session_state:
-    st.session_state["selected"] = DEFAULT_CREATORS[0]
+    st.session_state["selected"] = st.session_state["creators"][0]
 if "shortlist" not in st.session_state:
     st.session_state["shortlist"] = set()
 if "campaigns" not in st.session_state:
