@@ -1,4 +1,7 @@
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
+from modules.ai_matching.matcher import Brief, rank_creators
 
 # Backwards-compatibility helper for Streamlit < 1.27
 def rerun_app():
@@ -453,37 +456,25 @@ elif st.session_state["page"] == "Smart Brief Builder":
 
             c_desc = st.text_area("Creative Guidelines *", value="Focus on natural application, texture close-ups, and genuine unboxing reactions.")
 
+            b5, b6 = st.columns(2)
+            c_aspect = b5.selectbox("Aspect Ratio", ["Any", "9:16", "1:1", "4:5", "16:9"])
+            c_commercial = b6.checkbox("Commercial use required", value=True)
+
             if st.form_submit_button("⚡ Run AI Matching Engine →", use_container_width=True):
-                recalculated = []
-                for cr in st.session_state["creators"]:
-                    score = 0
-                    reasons = []
-
-                    overlap = len(set(selected_niches).intersection(cr["niches"]))
-                    if overlap > 0:
-                        score += min(45, overlap * 25)
-                        reasons.append(f"Matches {overlap} target category tag(s)")
-
-                    if c_format in cr["content_types"]:
-                        score += 30
-                        reasons.append(f"Proven format mastery in {c_format}")
-
-                    if cr["rate_min"] <= c_budget <= cr["rate_max"]:
-                        score += 25
-                        reasons.append(f"Rate (${cr['rate_min']}-${cr['rate_max']}) aligns with budget")
-                    elif c_budget >= cr["rate_min"]:
-                        score += 15
-                        reasons.append("Within reasonable negotiation range")
-                    else:
-                        score += 5
-                        reasons.append(f"Base rate (${cr['rate_min']}) exceeds budget")
-
-                    cr_copy = cr.copy()
-                    cr_copy["match_score"] = min(98, score)
-                    cr_copy["reasons"] = reasons
-                    recalculated.append(cr_copy)
-
-                st.session_state["creators"] = recalculated
+                brief = Brief(
+                    title=c_name,
+                    goal=f"{c_goal} {c_product}",
+                    audience=c_brand,
+                    content_type=c_format,
+                    niches=selected_niches,
+                    style=c_desc,
+                    budget=c_budget,
+                    aspect_ratio="" if c_aspect == "Any" else c_aspect,
+                    commercial_use=c_commercial,
+                    currency="$",
+                )
+                recalculated = rank_creators(st.session_state["creators"], brief)
+                st.session_state["matches"] = recalculated
                 st.session_state["campaigns"].insert(0, {
                     "name": c_name,
                     "niche": f"{selected_niches[0]} • Live",
@@ -500,7 +491,7 @@ elif st.session_state["page"] == "Smart Brief Builder":
         st.markdown("<div class='saas-card' style='background:#f0fdf4;border-color:#bbf7d0;'>", unsafe_allow_html=True)
         st.markdown("<b style='color:#047857;font-size:13px;'>Algorithmic Scoring Model</b>", unsafe_allow_html=True)
         st.write("")
-        st.markdown("- 🎯 **Category Synergy (45%)**\n- 📹 **Deliverable Format (30%)**\n- 💰 **Budget Alignment (25%)**")
+        st.markdown("- 🎯 **Niche Fit (30%)**\n- 📹 **Content Type (25%)**\n- 🔎 **Brief Keywords (15%)**\n- 💰 **Budget Alignment (15%)**\n- 📐 **Aspect Ratio (10%)**\n- 🛡️ **Trust Signals (5%)**")
         st.write("")
         st.info("The match model recalibrates dynamically as soon as you submit the form.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -514,8 +505,12 @@ elif st.session_state["page"] == "Matching Results":
     st.caption("Top matches ranked by compatibility with your active campaign brief.")
 
     st.tabs(["All Matches", "Instagram", "YouTube", "TikTok"])
-    matched_creators = sorted(st.session_state["creators"], key=lambda x: x["match_score"], reverse=True)
-
+    matched_creators = sorted(
+        st.session_state.get("matches", st.session_state["creators"]),
+        key=lambda x: x["match_score"], reverse=True,
+    )
+    if not matched_creators:
+        st.info("No creators matched this brief. Try a different niche, a higher budget, or turn off 'Commercial use required'.")
     res_cols = st.columns(3)
     for idx, c in enumerate(matched_creators):
         with res_cols[idx % 3]:
@@ -531,9 +526,8 @@ elif st.session_state["page"] == "Matching Results":
             st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in c["niches"]]), unsafe_allow_html=True)
             st.caption(f"👥 {c['followers']} · 📈 {c['engagement']} ER")
 
-            if "reasons" in c and c["reasons"]:
-                st.markdown(f"<span style='color:#059669;font-size:11px;font-weight:600;'>✓ {c['reasons'][0]}</span>", unsafe_allow_html=True)
-
+            for reason in c.get("reasons", [])[:3]:
+                st.markdown(f"<span style='color:#059669;font-size:11px;font-weight:600;'>✓ {reason}</span>", unsafe_allow_html=True)
             st.write("")
             b_short, b_prof = st.columns(2)
             is_sh = c["id"] in st.session_state["shortlist"]
