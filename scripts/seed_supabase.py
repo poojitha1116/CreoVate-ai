@@ -22,6 +22,7 @@ COLUMNS = {
     "followers", "engagement", "avg_views", "rate_min", "rate_max",
     "turnaround_days", "commercial_license", "verified_tools",
     "verified_past_work", "rating", "avatar", "banner", "recent_work",
+    "portfolio", "verified_workflow", "process_evidence",
 }
 
 # Extra fields for the matcher, one block per creator.
@@ -83,6 +84,56 @@ EXTRA = {
 }
 
 
+# Sample portfolio, workflow and verification data for each creator.
+PROFILE_EXTRA = {
+    "CR001": {
+        "verified_workflow": True,
+        "process_evidence": "Shared shoot footage, CapCut project files and edit timeline.",
+        "portfolio": [
+            {"title": "Monsoon Lookbook Reel", "type": "reel", "tools": ["CapCut", "Midjourney"], "description": "AI backgrounds with real styling shots."},
+            {"title": "Capsule Wardrobe Carousel", "type": "carousel", "tools": ["Canva"], "description": "Seven-slide outfit guide."},
+        ],
+    },
+    "CR002": {
+        "verified_workflow": True,
+        "process_evidence": "Drone logs, raw clips and Premiere Pro project screenshots.",
+        "portfolio": [
+            {"title": "Himalayan Tech Setup", "type": "video", "tools": ["Premiere Pro", "Runway"], "description": "Travel film with AI-extended shots."},
+            {"title": "Backcountry Gear Test", "type": "video", "tools": ["DaVinci Resolve"], "description": "Cinematic gear review."},
+        ],
+    },
+    "CR003": {
+        "verified_workflow": False,
+        "process_evidence": None,
+        "portfolio": [
+            {"title": "30-Day Strength Routine", "type": "tutorial", "tools": ["CapCut"], "description": "Step-by-step workout series."},
+        ],
+    },
+    "CR004": {
+        "verified_workflow": True,
+        "process_evidence": "Screen recordings of the full AI tool workflow.",
+        "portfolio": [
+            {"title": "AI Tools Desk Setup", "type": "tutorial", "tools": ["Runway", "ElevenLabs"], "description": "Walkthrough with AI voiceover."},
+            {"title": "Software Suite Deep Dive", "type": "video", "tools": ["Premiere Pro"], "description": "Long-form product review."},
+        ],
+    },
+    "CR005": {
+        "verified_workflow": False,
+        "process_evidence": None,
+        "portfolio": [
+            {"title": "15-Minute Meals Carousel", "type": "carousel", "tools": ["Canva", "Firefly"], "description": "Quick recipe cards."},
+        ],
+    },
+    "CR006": {
+        "verified_workflow": False,
+        "process_evidence": None,
+        "portfolio": [
+            {"title": "Office Skit Series", "type": "reel", "tools": ["CapCut"], "description": "Relatable workplace comedy."},
+        ],
+    },
+}
+
+
 def read_default_creators():
     """Read the DEFAULT_CREATORS list from frontend/app.py without running the app."""
     tree = ast.parse(APP_FILE.read_text(encoding="utf-8"))
@@ -104,6 +155,7 @@ def main():
     for creator in read_default_creators():
         row = {k: v for k, v in creator.items() if k in COLUMNS}
         row.update(EXTRA.get(creator["id"], {}))
+        row.update(PROFILE_EXTRA.get(creator["id"], {}))
         rows.append(row)
 
     client = create_client(url, secret)

@@ -57,3 +57,47 @@ def get_filter_options(df: pd.DataFrame) -> Dict[str, List[str]]:
         return sorted({x for items in df[col] for x in items})
     return {"niches": uniq("niches"), "skills": uniq("skills"), "tools": uniq("tools"),
             "content_types": uniq("content_types"), "formats": uniq("formats")}
+
+
+def _as_list(value) -> list:
+    """Turn None, a single value or a list into a clean list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        return [str(v) for v in value]
+    return [str(value)]
+
+
+def filter_creator_dicts(creators, niches=None, skills=None, content_types=None, tools=None,
+                         max_budget=None, verified_only=False, query: str = "") -> list:
+    """Same filters as filter_creators, but for a list of creator dicts.
+    Safe when a field is None or missing."""
+    out = []
+    for c in creators:
+        if niches and not _any_match(_as_list(c.get("niches")), niches):
+            continue
+        if content_types and not _any_match(_as_list(c.get("content_types")), content_types):
+            continue
+        if skills and not _any_match(_as_list(c.get("skills")), skills, substring=True):
+            continue
+        if tools and not _any_match(_as_list(c.get("tools")), tools):
+            continue
+        if max_budget and (c.get("rate_min") or 0) > max_budget:
+            continue
+        if verified_only and not (c.get("verified_tools") or c.get("verified_past_work") or c.get("verified_workflow")):
+            continue
+        if query:
+            blob = " ".join([str(c.get("name") or ""), str(c.get("specialization") or ""),
+                             *_as_list(c.get("skills")), *_as_list(c.get("tools")),
+                             *_as_list(c.get("niches"))]).lower()
+            if query.lower() not in blob:
+                continue
+        out.append(c)
+    return out
+
+
+def get_filter_options_from_dicts(creators) -> dict:
+    """Values for the dropdowns, taken from a list of creator dicts."""
+    def uniq(key):
+        return sorted({x for c in creators for x in _as_list(c.get(key))})
+    return {k: uniq(k) for k in ("niches", "skills", "tools", "content_types")}

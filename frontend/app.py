@@ -3,6 +3,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 from modules.ai_matching.matcher import Brief, rank_creators
 from modules.ai_matching.db import fetch_creators
+from modules.ai_matching.filters import filter_creator_dicts, get_filter_options_from_dicts
 
 # Backwards-compatibility helper for Streamlit < 1.27
 def rerun_app():
@@ -390,17 +391,30 @@ elif st.session_state["page"] == "Creator Studio":
             st.session_state["page"] = "Smart Brief Builder"
             rerun_app()
 
-    f1, f2, f3 = st.columns([2, 1, 1])
-    q_search = f1.text_input("Search", placeholder="Search creator name or niche...", label_visibility="collapsed")
-    f_niche = f2.selectbox("Filter Niche", ["All Niches", "Fashion", "Tech", "Fitness", "Food", "Travel", "Comedy"], label_visibility="collapsed")
-    show_shortlist = f3.checkbox("⭐ Show Shortlisted")
+    options = get_filter_options_from_dicts(st.session_state["creators"])
 
-    filtered = [
-        c for c in st.session_state["creators"]
-        if (q_search.lower() in c["name"].lower() or any(q_search.lower() in n.lower() for n in c["niches"]))
-        and (f_niche == "All Niches" or f_niche in c["niches"])
-        and (not show_shortlist or c["id"] in st.session_state["shortlist"])
-    ]
+    f1, f2, f3 = st.columns([2, 1, 1])
+    q_search = f1.text_input("Search", placeholder="Search name, skill, tool or niche...", label_visibility="collapsed")
+    f_niche = f2.multiselect("Niche", options["niches"], placeholder="Niche", label_visibility="collapsed")
+    f_type = f3.multiselect("Content type", options["content_types"], placeholder="Content type", label_visibility="collapsed")
+
+    g1, g2, g3, g4 = st.columns([1, 1, 1, 1])
+    f_tools = g1.multiselect("Tools", options["tools"], placeholder="Tools", label_visibility="collapsed")
+    f_skills = g2.multiselect("Skills", options["skills"], placeholder="Skills", label_visibility="collapsed")
+    f_budget = g3.slider("Max budget ($, 0 = any)", 0, 2000, 0, step=50)
+    with g4:
+        verified_only = st.checkbox("✅ Verified only")
+        show_shortlist = st.checkbox("⭐ Show Shortlisted")
+
+    filtered = filter_creator_dicts(
+        st.session_state["creators"],
+        niches=f_niche, content_types=f_type, tools=f_tools, skills=f_skills,
+        max_budget=f_budget, verified_only=verified_only, query=q_search,
+    )
+    if show_shortlist:
+        filtered = [c for c in filtered if c["id"] in st.session_state["shortlist"]]
+    if not filtered:
+        st.info("No creators match these filters. Try removing one filter.")
 
     grid_cols = st.columns(3)
     for idx, c in enumerate(filtered):
@@ -409,7 +423,7 @@ elif st.session_state["page"] == "Creator Studio":
             st.image(c["avatar"], width=62)
             st.markdown(f"**{c['name']} ✓**")
             st.caption(f"{c['handle']} · 👥 {c['followers']} · 📈 {c['engagement']}")
-            st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in c["niches"]]), unsafe_allow_html=True)
+            st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in (c.get("niches") or [])]), unsafe_allow_html=True)
             st.write("")
             b_fav, b_view = st.columns(2)
             is_faved = c["id"] in st.session_state["shortlist"]
@@ -478,7 +492,7 @@ elif st.session_state["page"] == "Smart Brief Builder":
                 st.session_state["matches"] = recalculated
                 st.session_state["campaigns"].insert(0, {
                     "name": c_name,
-                    "niche": f"{selected_niches[0]} • Live",
+                    "niche": f"{selected_niches[0] if selected_niches else 'General'} • Live",
                     "status": "Active",
                     "creators": len(recalculated),
                     "budget": f"${c_budget}",
@@ -508,7 +522,7 @@ elif st.session_state["page"] == "Matching Results":
     st.tabs(["All Matches", "Instagram", "YouTube", "TikTok"])
     matched_creators = sorted(
         st.session_state.get("matches", st.session_state["creators"]),
-        key=lambda x: x["match_score"], reverse=True,
+        key=lambda x: x.get("match_score") or 0, reverse=True,
     )
     if not matched_creators:
         st.info("No creators matched this brief. Try a different niche, a higher budget, or turn off 'Commercial use required'.")
@@ -522,12 +536,13 @@ elif st.session_state["page"] == "Matching Results":
                 st.markdown(f"**{c['name']}**")
                 st.caption(f"{c['handle']}")
             with top_r:
-                st.markdown(f"<span class='match-pill'>{c['match_score']}% match</span>", unsafe_allow_html=True)
+                if c.get("match_score") is not None:
+                    st.markdown(f"<span class='match-pill'>{c['match_score']}% match</span>", unsafe_allow_html=True)
 
-            st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in c["niches"]]), unsafe_allow_html=True)
+            st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in (c.get("niches") or [])]), unsafe_allow_html=True)
             st.caption(f"👥 {c['followers']} · 📈 {c['engagement']} ER")
 
-            for reason in c.get("reasons", [])[:3]:
+            for reason in (c.get("reasons") or [])[:3]:
                 st.markdown(f"<span style='color:#059669;font-size:11px;font-weight:600;'>✓ {reason}</span>", unsafe_allow_html=True)
             st.write("")
             b_short, b_prof = st.columns(2)
@@ -557,16 +572,18 @@ elif st.session_state["page"] == "Creator Profile":
         rerun_app()
 
     st.markdown("<div class='saas-card'>", unsafe_allow_html=True)
-    st.image(selected["banner"], use_column_width=True)
+    st.image(selected["banner"], width="stretch")
 
     p_left, p_right = st.columns([3, 1])
     with p_left:
         st.image(selected["avatar"], width=84)
         st.markdown(f"<h3 style='margin:0;color:#0f172a;'>{selected['name']} ✓</h3>", unsafe_allow_html=True)
         st.caption(f"{selected['handle']} • {selected['location']} • Joined {selected['joined']}")
-        st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in selected["niches"]]), unsafe_allow_html=True)
+        st.markdown(" ".join([f"<span class='tag-pill'>{n}</span>" for n in (selected.get("niches") or [])]), unsafe_allow_html=True)
     with p_right:
-        st.markdown(f"<div style='text-align:center;padding:12px;background:#ecfdf5;border-radius:12px;border:1px solid #a7f3d0;'><h2 style='margin:0;color:#047857;'>{selected['match_score']}%</h2><span style='font-size:11px;color:#047857;font-weight:700;'>MATCH RATING</span></div>", unsafe_allow_html=True)
+        score = selected.get("match_score")
+        if score is not None:
+            st.markdown(f"<div style='text-align:center;padding:12px;background:#ecfdf5;border-radius:12px;border:1px solid #a7f3d0;'><h2 style='margin:0;color:#047857;'>{score}%</h2><span style='font-size:11px;color:#047857;font-weight:700;'>MATCH RATING</span></div>", unsafe_allow_html=True)
 
     st.markdown("<hr style='margin:16px 0; border:none; border-bottom:1px solid #e2e8f0;'/>", unsafe_allow_html=True)
 
@@ -578,18 +595,42 @@ elif st.session_state["page"] == "Creator Profile":
     st.markdown("<hr style='margin:16px 0; border:none; border-bottom:1px solid #e2e8f0;'/>", unsafe_allow_html=True)
 
     st.markdown("**Creator Overview**")
-    st.write(selected["bio"])
+    st.write(selected.get("bio") or "")
 
-    if "reasons" in selected:
+    if selected.get("reasons"):
         st.markdown("**Algorithmic Fit Drivers**")
         for r in selected["reasons"]:
             st.markdown(f"- <span style='color:#059669;font-size:12px;'>{r}</span>", unsafe_allow_html=True)
 
-    st.markdown("**Recent Deliverables**")
-    pw1, pw2, pw3 = st.columns(3)
-    pw1.image(selected["recent_work"][0], use_column_width=True)
-    pw2.image(selected["recent_work"][1], use_column_width=True)
-    pw3.image(selected["recent_work"][2], use_column_width=True)
+    st.markdown("**Verification**")
+    v1, v2, v3 = st.columns(3)
+    v1.markdown("✅ Verified tools" if selected.get("verified_tools") else "⚪ Tools not verified")
+    v2.markdown("✅ Verified workflow" if selected.get("verified_workflow") else "⚪ Workflow not verified")
+    v3.markdown("✅ Verified past work" if selected.get("verified_past_work") else "⚪ Past work not verified")
+
+    if selected.get("specialization"):
+        st.markdown(f"**Specialization:** {selected['specialization']}")
+    if selected.get("tools"):
+        st.markdown("**Tools:** " + " ".join(f"<span class='tag-pill'>{t}</span>" for t in selected["tools"]), unsafe_allow_html=True)
+    if selected.get("skills"):
+        st.markdown("**Skills:** " + " ".join(f"<span class='tag-pill'>{s}</span>" for s in selected["skills"]), unsafe_allow_html=True)
+    if selected.get("workflow"):
+        st.markdown(f"**Workflow:** {selected['workflow']}")
+    if selected.get("process_evidence"):
+        st.caption(f"Process evidence: {selected['process_evidence']}")
+
+    if selected.get("portfolio"):
+        st.markdown("**AI Portfolio**")
+        for item in selected["portfolio"]:
+            tools_used = ", ".join(item.get("tools", []))
+            st.markdown(f"- **{item.get('title', 'Untitled')}** ({item.get('type', '')}): {item.get('description', '')}  \n  <span style='font-size:11px;color:#64748b;'>Tools: {tools_used}</span>", unsafe_allow_html=True)
+
+    work = selected.get("recent_work") or []
+    if work:
+        st.markdown("**Recent Deliverables**")
+        pw_cols = st.columns(3)
+        for i, url in enumerate(work[:3]):
+            pw_cols[i].image(url, width="stretch")
 
     st.write("")
     b_act1, b_act2 = st.columns(2)

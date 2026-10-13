@@ -33,3 +33,8 @@ create policy "Public can read creators"
   on public.creators for select
   to anon
   using (true);
+
+  alter table public.creators
+  add column if not exists portfolio jsonb default '[]'::jsonb,
+  add column if not exists verified_workflow boolean default false,
+  add column if not exists process_evidence text;
