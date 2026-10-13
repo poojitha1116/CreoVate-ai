@@ -1,9 +1,4 @@
-streamlit
-pandas
-scikit-learn
-sentence-transformers
-Pillow
-pandas
-pytest
-supabase
-python-dotenv
+   streamlit
+   pandas
+   supabase
+   python-dotenv
