@@ -4,6 +4,7 @@ import streamlit as st
 from modules.ai_matching.matcher import Brief, rank_creators
 from modules.ai_matching.db import fetch_creators
 from modules.ai_matching.filters import filter_creator_dicts, get_filter_options_from_dicts
+from modules.ai_matching.brief_builder import build_brief
 
 # Backwards-compatibility helper for Streamlit < 1.27
 def rerun_app():
@@ -85,6 +86,10 @@ st.markdown(
     }
     
     /* Hero Feature Banner */
+        /* Hide the empty card shells (Streamlit closes the div before the content) */
+    .saas-card:empty, .hero-card:empty {
+        display: none !important;
+    }
     .hero-card {
         background: #f0fdf4;
         border: 1px solid #bbf7d0;
@@ -448,32 +453,73 @@ elif st.session_state["page"] == "Smart Brief Builder":
     st.subheader("Smart Campaign Brief Wizard")
     st.caption("Provide campaign requirements to calculate instant match scores across creators.")
 
+    FORMAT_OPTIONS = ["Short-form Video", "Carousel", "Tutorials", "Long-form Video"]
+    ASPECT_OPTIONS = ["Any", "9:16", "1:1", "4:5", "16:9"]
+    NICHE_OPTIONS = ["Fashion", "Beauty", "Lifestyle", "Tech", "Fitness", "Food", "Travel", "Comedy"]
+    GOAL_OPTIONS = ["Brand Awareness", "Conversions", "UGC Production"]
+
+    # Starting values for the form (set once).
+    BRIEF_DEFAULTS = {
+        "bf_name": "Summer Glow Skincare Launch",
+        "bf_brand": "Acme Cosmetics",
+        "bf_goal": "Brand Awareness",
+        "bf_product": "Organic Vitamin C Serum",
+        "bf_niches": ["Beauty", "Lifestyle"],
+        "bf_format": "Short-form Video",
+        "bf_budget": 800,
+        "bf_desc": "Focus on natural application, texture close-ups, and genuine unboxing reactions.",
+        "bf_aspect": "Any",
+        "bf_commercial": True,
+    }
+    for k, v in BRIEF_DEFAULTS.items():
+        st.session_state.setdefault(k, v)
+
+    def apply_idea():
+        """Fill the form fields from the rough idea."""
+        b = build_brief(st.session_state.get("bf_idea", ""))
+        st.session_state["bf_name"] = b["title"]
+        st.session_state["bf_product"] = b["product"]
+        st.session_state["bf_goal"] = b["goal"] if b["goal"] in GOAL_OPTIONS else "Brand Awareness"
+        st.session_state["bf_niches"] = [n for n in b["niches"] if n in NICHE_OPTIONS]
+        st.session_state["bf_format"] = b["content_type"] if b["content_type"] in FORMAT_OPTIONS else "Short-form Video"
+        st.session_state["bf_budget"] = max(300, min(2000, int(round(b["budget"] / 50) * 50)))
+        st.session_state["bf_aspect"] = b["aspect_ratio"] if b["aspect_ratio"] in ASPECT_OPTIONS else "Any"
+        st.session_state["bf_commercial"] = b["commercial_use"]
+        st.session_state["bf_desc"] = b["guidelines"]
+        st.session_state["bf_notes"] = b["notes"]
+
+    st.markdown("**✨ AI Brief Helper**")
+    st.text_area(
+        "Describe your idea in your own words",
+        key="bf_idea",
+        placeholder="Example: We want reels for our new vitamin C serum to boost sales, budget 600 dollars",
+    )
+    st.button("✨ Fill the form with AI", on_click=apply_idea)
+    for note in st.session_state.get("bf_notes", []):
+        st.info(note)
+
     f_col, s_col = st.columns([2, 1], gap="large")
     with f_col:
         st.markdown("<div class='saas-card'>", unsafe_allow_html=True)
         with st.form("brief_form"):
-            c_name = st.text_input("Campaign Name *", value="Summer Glow Skincare Launch")
-            c_brand = st.text_input("Brand / Company *", value="Acme Cosmetics")
+            c_name = st.text_input("Campaign Name *", key="bf_name")
+            c_brand = st.text_input("Brand / Company *", key="bf_brand")
 
             b1, b2 = st.columns(2)
-            c_goal = b1.selectbox("Campaign Goal *", ["Brand Awareness", "Conversions", "UGC Production"])
-            c_product = b2.text_input("Product / Service *", value="Organic Vitamin C Serum")
+            c_goal = b1.selectbox("Campaign Goal *", GOAL_OPTIONS, key="bf_goal")
+            c_product = b2.text_input("Product / Service *", key="bf_product")
 
-            selected_niches = st.multiselect(
-                "Target Creator Niches *",
-                ["Fashion", "Beauty", "Lifestyle", "Tech", "Fitness", "Food", "Travel", "Comedy"],
-                default=["Beauty", "Lifestyle"]
-            )
+            selected_niches = st.multiselect("Target Creator Niches *", NICHE_OPTIONS, key="bf_niches")
 
             b3, b4 = st.columns(2)
-            c_format = b3.selectbox("Format", ["Short-form Video", "Carousel", "Tutorials", "Long-form Video"])
-            c_budget = b4.slider("Budget per Creator ($)", 300, 2000, 800, step=50)
+            c_format = b3.selectbox("Format", FORMAT_OPTIONS, key="bf_format")
+            c_budget = b4.slider("Budget per Creator ($)", 300, 2000, step=50, key="bf_budget")
 
-            c_desc = st.text_area("Creative Guidelines *", value="Focus on natural application, texture close-ups, and genuine unboxing reactions.")
+            c_desc = st.text_area("Creative Guidelines *", key="bf_desc")
 
             b5, b6 = st.columns(2)
-            c_aspect = b5.selectbox("Aspect Ratio", ["Any", "9:16", "1:1", "4:5", "16:9"])
-            c_commercial = b6.checkbox("Commercial use required", value=True)
+            c_aspect = b5.selectbox("Aspect Ratio", ASPECT_OPTIONS, key="bf_aspect")
+            c_commercial = b6.checkbox("Commercial use required", key="bf_commercial")
 
             if st.form_submit_button("⚡ Run AI Matching Engine →", use_container_width=True):
                 brief = Brief(
